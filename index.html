@@ -2115,13 +2115,37 @@ async function aiFill(){
  }catch(e){
   const c=e&&e.code;
   if(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].includes(c)){AI.sample=null;AI.img=null;pendingImgs=[];fallback=true;}
+  else if(c==='network'||c==='upstream'){pendingImgs=[];fallback=true;}
   else if(c==='images_unavailable'){AI.img=null;pendingImgs=[];AI.msg='Les photos ne peuvent pas être analysées ici; la dictée fonctionne toujours.';AI.cls='err';}
   else{AI.msg=({cancelled:'Analyse arrêtée.',rate_limited:'Trop d’analyses en peu de temps. Réessayez dans un moment.',image_rejected:'Cette photo ne peut pas être lue. Essayez-en une autre.',refused:'Ce texte n’a pas pu être analysé.',session_expired:'Reconnectez-vous à Claude pour utiliser l’analyse.'})[c]||'L’analyse n’a pas fonctionné. Réessayez, ou remplissez à la main.';AI.cls='err';}
  }finally{AI.busy=false;AI.ctl=null;}
  if(fallback){localFill(txt,true);return;}
  saveDraft();rerenderKeepScroll();
 }
+/* Version hébergée : l'analyse passe par la fonction Supabase « analyse » (clé Anthropic gardée côté serveur).
+   Si la fonction n'est pas encore installée, l'application retombe sur l'analyse intégrée, sans message d'erreur. */
+async function imgB64(file){
+ const bmp=await createImageBitmap(file);const k=Math.min(1,1568/Math.max(bmp.width,bmp.height));
+ const c=document.createElement('canvas');c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
+ c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);return c.toDataURL('image/jpeg',0.85).split(',')[1];
+}
+function jsonFrom(t){t=String(t||'').replace(/```(?:json)?/g,'');const i=t.indexOf('{'),j=t.lastIndexOf('}');if(i<0||j<i)throw Object.assign(new Error('no json'),{code:'refused'});return JSON.parse(t.slice(i,j+1));}
+const SupaAI={
+ async json(prompt,opts={}){
+  const images=[];for(const f of (opts.images||[])){try{images.push(await imgB64(f));}catch(e){throw Object.assign(new Error('img'),{code:'image_rejected'});}}
+  let t;try{t=await SB.token();}catch(e){throw Object.assign(new Error('auth'),{code:'session_expired'});}
+  let r;try{r=await fetch(`${SUPA.url}/functions/v1/analyse`,{method:'POST',signal:opts.signal,headers:{apikey:SUPA.key,Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify({prompt,images})});}
+  catch(e){throw Object.assign(new Error('net'),{code:e&&e.name==='AbortError'?'cancelled':'network'});}
+  if(r.status===404||r.status===503)throw Object.assign(new Error('absent'),{code:'sampling_disabled'});
+  if(r.status===403||r.status===401)throw Object.assign(new Error('denied'),{code:'not_granted'});
+  if(r.status===429)throw Object.assign(new Error('rate'),{code:'rate_limited'});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){if(j.status===429)throw Object.assign(new Error('rate'),{code:'rate_limited'});throw Object.assign(new Error(j.detail||j.error||'err'),{code:'upstream'});}
+  return jsonFrom(j.text);
+ }
+};
 async function initAI(){
+ if(SB.on()){AI.sample=SupaAI;AI.img={maxCount:3,mediaTypes:['image/jpeg','image/png','image/webp','image/heic','image/heif']};if(activeTab==='form'&&!doneRec)rerenderKeepScroll();return;}
  if(!(window.claude&&window.claude.use))return;
  let s=null;try{s=await window.claude.use('sample');}catch(e){}
  if(!s)return;
