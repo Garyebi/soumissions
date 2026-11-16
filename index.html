@@ -673,7 +673,15 @@ async function supaMe(){
  try{const r=await SB.req('membres?select=nom,role&email=eq.'+encodeURIComponent(SB.s.email));SB.me=r&&r[0]||null;}catch(e){SB.me=null;}
  if(!SB.me){SB.logout();showLogin('Ce compte n’est pas encore autorisé. Demandez à Gary de l’ajouter.');return false;}
  if(SB.me.role==='rep'&&REPS.some(x=>x.name===SB.me.nom)&&!(LS.get(K_REP,{}).name)){LS.set(K_REP,{name:SB.me.nom});if(!A.rep_name&&!A._editId){A.rep_name=SB.me.nom;}}
+ applyRole();
  return true;
+}
+// Dave et Gary arrivent directement sur le Suivi; les représentants ne voient pas le Suivi (statuts gérés par Dave).
+function applyRole(){
+ const r=SB.me&&SB.me.role,coord=r==='coord'||r==='admin',st=$('[data-tab=suivi]');
+ if(st)st.hidden=r==='rep';
+ if(coord&&activeTab==='form'&&!doneRec)setTab('suivi');
+ if(r==='rep'&&activeTab==='suivi')setTab('form');
 }
 function showLogin(msg){
  let o=$('#sbLogin');
@@ -691,7 +699,7 @@ function showLogin(msg){
    b.disabled=true;b.textContent='Connexion…';$('#sbErr').textContent='';
    try{await SB.login(em,pw);LS.set('ebi_ds_sb_email',em.trim().toLowerCase());
     if(await supaMe()){o.hidden=true;$('#sbPw').value='';setCloud('loading');await supaPull();renderNotesMe();if(activeTab==='form'&&!doneRec)renderWizard();}
-   }catch(err){$('#sbErr').textContent=(err.status===400||err.code==='invalid_credentials')?'Courriel ou mot de passe incorrect.':(err.status?'Connexion refusée ('+err.status+'). Réessayez.':'Pas de connexion Internet. Réessayez quand le réseau revient.');}
+   }catch(err){$('#sbErr').textContent=err.code==='email_not_confirmed'?'Ce compte n’est pas encore confirmé. Gary doit le recréer avec « Auto Confirm User ».':err.code==='invalid_credentials'?'Courriel ou mot de passe incorrect.':err.status?'Connexion refusée ('+err.status+(err.code?' · '+err.code:'')+') : '+err.message:'Impossible de joindre le serveur. Vérifiez la connexion Internet.';}
    finally{b.disabled=false;b.textContent='Se connecter';}
   });
  }
@@ -702,7 +710,7 @@ function renderNotesMe(){
  if(!SB.on())return;const v=$('#v-notes');if(!v)return;let d=$('#sbMe');
  if(!d){d=document.createElement('div');d.id='sbMe';d.className='card sbme';v.insertBefore(d,v.children[1]||null);}
  d.innerHTML=SB.s?`<span>Connecté : <b>${esc(SB.me&&SB.me.nom||SB.s.email)}</b> <span class="muted small">${esc(SB.s.email)}</span></span><button class="btn ghost sm" type="button" id="sbOut">Se déconnecter</button>`:'<span class="muted">Non connecté.</span>';
- const b=$('#sbOut');if(b)b.onclick=e=>askConfirm(e.currentTarget,()=>{SB.logout();LS.del(K_REP);renderNotesMe();showLogin('');},'Toucher encore pour se déconnecter');
+ const b=$('#sbOut');if(b)b.onclick=e=>askConfirm(e.currentTarget,()=>{SB.logout();LS.del(K_REP);const st=$('[data-tab=suivi]');if(st)st.hidden=false;setTab('form');renderNotesMe();showLogin('');},'Toucher encore pour se déconnecter');
 }
 const Store={
  local(){return LS.get(K_SUB,[]);},
