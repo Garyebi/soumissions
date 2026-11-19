@@ -555,7 +555,7 @@ table.t td:first-child{white-space:nowrap}
 <script>
 (function(){
 'use strict';
-const VERSION='v0.9', VDATE='2026-11-16';
+const VERSION='v0.9.1', VDATE='2026-11-19';
 const K_SUB='ebi_ds_demandes_v1', K_DRAFT='ebi_ds_brouillon_v2', K_PHX='ebi_ds_phoenix_v1', K_PHXDEMO='ebi_ds_phoenix_demo_v1', K_REP='ebi_ds_rep_v2', K_DEMO='ebi_ds_demo_v1', K_PHXD='ebi_ds_phx_demo_v2';
 
 /* Représentants (courriels à compléter par les T.I.) */
@@ -1189,7 +1189,7 @@ function renderWizard(){
   const bad=doneRec.assess&&doneRec.assess.level==='bloque';
   const mailLbl=(doneRec._mailed?'Envoyer à nouveau à ':'Envoyer à ')+esc(coordFirst())+(doneRec._mailed?'':' par courriel');
   const mailBtn=`<button class="btn wide${bad||(Cloud.db&&!SB.on())?' ghost':''}" type="button" data-act="mail-coord" style="margin-top:12px">${mailLbl}</button>`;
-  $('#form').innerHTML=`<div class="card done"><div class="big">${bad?'!':'✓'}</div><h2>${doneRec._edited?'Demande complétée et renvoyée':'Demande envoyée'}</h2><div class="id">${esc(doneRec.id)}</div><p class="muted">${esc(doneRec.productLabel)} — ${esc(doneRec.client)}${doneRec.entrySec!=null?`<br>Remplie en ${fmtDur(doneRec.entrySec)}`:''}<br>${SB.on()?`${esc(coordFirst())} la voit maintenant dans son suivi. Touchez « Envoyer à ${esc(coordFirst())} » pour l’aviser avec la fiche PDF.`:Cloud.db?'Le coordonnateur la voit maintenant dans son suivi et vous contactera s’il manque une précision.':(CANSHARE?`Touchez « Envoyer à ${coordFirst()} » et choisissez Outlook : la fiche PDF est déjà jointe.`:`Touchez « Envoyer à ${coordFirst()} » : Outlook s’ouvre avec le message prêt, joignez-y la fiche PDF enregistrée.`)}${doneRec._pdf?'<br><b>Fiche PDF enregistrée sur votre appareil.</b>':''}</p>${bad?'':mailBtn}${doneRec.assess?`<div style="text-align:left;margin-top:14px">${verdictHTML(doneRec.assess,'done')}</div>`:''}${bad?`<button class="btn wide" type="button" data-act="complete-now" style="margin-top:4px">Compléter maintenant</button>`:''}${bad?mailBtn:''}<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px"><button class="btn${bad?' ghost':''}" type="button" data-act="new">Nouvelle demande</button><button class="btn ghost" type="button" data-act="pdf-done">${doneRec._pdf?'Télécharger à nouveau la fiche PDF':'Télécharger la fiche PDF'}</button><button class="btn ghost" type="button" data-act="see">Voir le suivi</button></div></div>`;
+  $('#form').innerHTML=`<div class="card done"><div class="big">${bad?'!':'✓'}</div><h2>${doneRec._edited?'Demande complétée et renvoyée':'Demande envoyée'}</h2><div class="id">${esc(doneRec.id)}</div><p class="muted">${esc(doneRec.productLabel)} — ${esc(doneRec.client)}${doneRec.entrySec!=null?`<br>Remplie en ${fmtDur(doneRec.entrySec)}`:''}<br>${SB.on()?`${esc(coordFirst())} la voit maintenant dans son suivi. Touchez « Envoyer à ${esc(coordFirst())} » pour l’aviser avec la fiche PDF.`:Cloud.db?'Le coordonnateur la voit maintenant dans son suivi et vous contactera s’il manque une précision.':(CANSHARE?`Touchez « Envoyer à ${coordFirst()} », choisissez Outlook et ajoutez ${coordFirst()} comme destinataire : la fiche PDF est déjà jointe.`:`Touchez « Envoyer à ${coordFirst()} » : Outlook s’ouvre avec le message prêt, joignez-y la fiche PDF enregistrée.`)}${doneRec._pdf?(CANSHARE?'<br><b>Fiche PDF prête à envoyer.</b>':'<br><b>Fiche PDF enregistrée sur votre appareil.</b>'):''}</p>${bad?'':mailBtn}${doneRec.assess?`<div style="text-align:left;margin-top:14px">${verdictHTML(doneRec.assess,'done')}</div>`:''}${bad?`<button class="btn wide" type="button" data-act="complete-now" style="margin-top:4px">Compléter maintenant</button>`:''}${bad?mailBtn:''}<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px"><button class="btn${bad?' ghost':''}" type="button" data-act="new">Nouvelle demande</button><button class="btn ghost" type="button" data-act="pdf-done">${CANSHARE&&PDFC[doneRec.id]?'Enregistrer la fiche PDF':doneRec._pdf?'Télécharger à nouveau la fiche PDF':'Télécharger la fiche PDF'}</button><button class="btn ghost" type="button" data-act="see">Voir le suivi</button></div></div>`;
   return;
  }
  $('#wizHead').style.display='';nav.style.display=activeTab==='form'?'':'none';
@@ -1268,7 +1268,7 @@ function submit(){
  LS.del(K_DRAFT);
  A=blankAnswers();stepIdx=0;doneRec=rec;pendingImgs=[];AI.msg='';
  renderWizard();window.scrollTo(0,0);
- deliverPdf(rec).then(ok=>{if(doneRec&&doneRec.id===rec.id){doneRec._pdf=ok;renderWizard();}});
+ deliverPdf(rec,{prepare:CANSHARE}).then(ok=>{if(doneRec&&doneRec.id===rec.id){doneRec._pdf=ok;renderWizard();}});
 }
 function copyFrom(id){
  const r=Store.list().find(x=>x.id===id);if(!r)return;
@@ -1298,6 +1298,7 @@ form.addEventListener('click',e=>{
  if(act==='new'){doneRec=null;goStep(0);return;}
  if(act==='see'){doneRec=null;renderWizard();setTab('suivi');return;}
  if(act==='mail-coord'){sendToCoord(doneRec);return;}
+ if(act==='pdf-done'&&CANSHARE&&PDFC[doneRec.id]){const f=new File([PDFC[doneRec.id]],pdfName(doneRec),{type:'application/pdf'});navigator.share({files:[f]}).catch(()=>{});return;}
  if(act==='pdf-done'){deliverPdf(doneRec).then(ok=>{if(doneRec){doneRec._pdf=doneRec._pdf||ok;renderWizard();}});return;}
  if(act==='edit'){goStep(+b.dataset.step);return;}
  if(act==='edit-rep'){A._editRep=true;}
@@ -1532,7 +1533,7 @@ function sendToCoord(r){
   const file=new File([blob],pdfName(r),{type:'application/pdf'});
   let ok=false;try{ok=navigator.canShare({files:[file]});}catch(e){}
   if(ok){
-   navigator.share({files:[file],title:subject,text:body})
+   navigator.share({files:[file],title:subject,text:(COORD.email?`Pour : ${COORD.name} <${COORD.email}>\n\n`:'')+body})
     .then(()=>{mark();toast('Demande partagée.');})
     .catch(e=>{if(e&&e.name==='AbortError')return;openCoordMail(r,subject,body);mark();});
    return;
@@ -1542,7 +1543,7 @@ function sendToCoord(r){
 }
 function openCoordMail(r,subject,body){
  mailto(COORD.email,subject,body);
- toast(PDFC[r.id]?`Joignez la fiche ${pdfName(r)} qui vient d’être enregistrée.`:'Touchez d’abord « Télécharger la fiche PDF », puis joignez-la au courriel.');
+ toast(PDFC[r.id]&&CANSHARE?'Touchez ensuite « Enregistrer la fiche PDF » pour la joindre au courriel.':PDFC[r.id]?`Joignez la fiche ${pdfName(r)} qui vient d’être enregistrée.`:'Touchez d’abord « Télécharger la fiche PDF », puis joignez-la au courriel.');
 }
 async function initDownloads(){if(!(window.claude&&window.claude.use))return;try{DL=await window.claude.use('downloads');}catch(e){}}
 function pdfName(r){return `${r.id}_${String(r.client||'demande').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)||'demande'}.pdf`;}
@@ -1642,10 +1643,11 @@ async function buildPdf(r){
   pg.drawText(t,{x:M,y:22,size:8,font:F,color:C(MUT)});pg.drawText(t2,{x:W-M-wid(F,8,t2),y:22,size:8,font:F,color:C(MUT)});});
  return await doc.save();
 }
-async function deliverPdf(r){
+async function deliverPdf(r,o={}){
  if(!window.PDFLib){toast('Le générateur de PDF n’est pas chargé. Vérifiez la connexion Internet, puis touchez « Télécharger la fiche PDF ».');return false;}
  let bytes;try{bytes=await buildPdf(r);}catch(e){console.error(e);toast('La fiche PDF n’a pas pu être générée. Réessayez.');return false;}
  const name=pdfName(r),blob=new Blob([bytes],{type:'application/pdf'});PDFC[r.id]=blob;
+ if(o.prepare)return true; // cellulaire : le PDF part avec le bouton « Envoyer à Dave », sans s’ouvrir par-dessus l’application
  if(DL){
   try{await DL.save({filename:name,data:blob});toast('Fiche PDF enregistrée.');return true;}
   catch(e){const c=e&&e.code;
