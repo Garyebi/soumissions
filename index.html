@@ -566,7 +566,7 @@ table.t td:first-child{white-space:nowrap}
 <script>
 (function(){
 'use strict';
-const VERSION='v0.10', VDATE='2026-11-22';
+const VERSION='v0.10.1', VDATE='2026-11-22';
 const K_SUB='ebi_ds_demandes_v1', K_DRAFT='ebi_ds_brouillon_v2', K_PHX='ebi_ds_phoenix_v1', K_PHXDEMO='ebi_ds_phoenix_demo_v1', K_REP='ebi_ds_rep_v2', K_DEMO='ebi_ds_demo_v1', K_PHXD='ebi_ds_phx_demo_v2';
 
 /* Représentants (courriels à compléter par les T.I.) */
@@ -983,10 +983,14 @@ function panelLevel(P){
  return c?'bad':(o&&!A.tech_in_docs?'warn':'');
 }
 function techConfirmAll(){return multi()?panelsAll().reduce((n,P)=>n+withPanel(P,techConfirm),0):techConfirm();}
+// Met à jour les onglets et le total sans redessiner les champs (le clavier du téléphone reste ouvert).
+function pnTabsHTML(L,pi){return L.map((P,i)=>`<button type="button" class="pntab${i===pi?' on':''}" data-act="pn-sel" data-i="${i}" role="tab" aria-selected="${i===pi}"><span class="dot ${panelLevel(P)}"></span>${i+1} · ${esc(P.product?PRODUCTS[P.product].label:'À choisir')}${pQty(P)>1?' × '+pQty(P):''}</button>`).join('');}
+function pnSectHTML(){return multi()?`Panneaux <span>${panelsAll().length} types · ${panelsAll().reduce((n,P)=>n+pQty(P),0)} panneaux au total</span>`:'Panneau';}
+function refreshPanelChips(){const bar=$('#form .pnbar'),sec=$('#pnSect');if(bar)bar.innerHTML=pnTabsHTML(panelsAll(),A._pi||0);if(sec)sec.innerHTML=pnSectHTML();}
 function panelsHTML(){
  const L=panelsAll(),pi=A._pi||0,mul=L.length>1;
  let h='';
- if(mul)h+=`<div class="pnbar" role="tablist">${L.map((P,i)=>`<button type="button" class="pntab${i===pi?' on':''}" data-act="pn-sel" data-i="${i}" role="tab" aria-selected="${i===pi}"><span class="dot ${panelLevel(P)}"></span>${i+1} · ${esc(P.product?PRODUCTS[P.product].label:'À choisir')}${pQty(P)>1?' × '+pQty(P):''}</button>`).join('')}</div>`;
+ if(mul)h+=`<div class="pnbar" role="tablist">${pnTabsHTML(L,pi)}</div>`;
  h+=`<div class="pnrow"><div class="field"><span class="flabel">${mul?'Quantité de ce panneau':'Quantité de panneaux identiques'}</span><span class="qty"><button type="button" data-act="pn-qty" data-d="-1" aria-label="Moins">−</button><input type="number" inputmode="numeric" min="1" data-k="p_qty" data-s="root" value="${esc(A.p_qty||'1')}" aria-label="Quantité de panneaux"><button type="button" data-act="pn-qty" data-d="1" aria-label="Plus">+</button></span></div>
   <div class="field pnname"><span class="flabel">Identification <span class="muted small">(facultatif)</span></span><input class="inp" data-k="p_name" data-s="root" value="${esc(A.p_name||'')}" placeholder="Ex. : MCC principal, panneau PLC convoyeur"></div></div>`;
  h+=productHTML();
@@ -1277,7 +1281,7 @@ function renderWizard(){
   +'<p class="lead">Environ 2 minutes, sur une seule page. Aucune question n’est obligatoire : remplissez ce que vous savez, le reste sera à confirmer.</p>'
   +dictHTML()
   +'<h2 class="sect">La demande</h2>'+fieldsHTML(STEP_REQ.fields.filter(f=>f.type!=='product'),A,'root')
-  +`<h2 class="sect" id="pnSect">${multi()?`Panneaux <span>${panelsAll().length} types · ${panelsAll().reduce((n,P)=>n+pQty(P),0)} panneaux au total</span>`:'Panneau'}</h2>`+panelsHTML();
+  +`<h2 class="sect" id="pnSect">${pnSectHTML()}</h2>`+panelsHTML();
  if(A.product&&!A.tech_in_docs){
   html+=`<h2 class="sect">Détails techniques <span>${multi()?esc(panelLabel(A,A._pi||0))+' · ':''}${esc(PRODUCTS[A.product].label)}</span></h2><p class="lead small">Les réponses habituelles sont déjà cochées et marquées <span class="habtag">habituel</span> : changez ce qui diffère, ou touchez la réponse pour la confirmer. Touchez <b>?</b> si vous ne savez pas.</p>`+fieldsHTML(PRODUCTS[A.product].tech,A,'root');
  }else if(!A.product){
@@ -1439,7 +1443,7 @@ form.addEventListener('input',e=>{
  clearErr(t.dataset.s+'|'+k.replace(/_autre$/,''));
  saveDraft();
  if(/^(kvar|steps_)/.test(k))updateKvarHint();
- if((k==='p_qty'||k==='p_name')&&multi())clearTimeout(form._pnT),form._pnT=setTimeout(()=>{const y=window.scrollY,ae=document.activeElement,key=ae&&ae.dataset&&ae.dataset.k,pos=ae&&ae.selectionStart;renderWizard();window.scrollTo(0,y);const el=key&&$(`#form [data-k="${key}"][data-s="root"]`);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}},700);
+ if(k==='p_qty'||k==='p_name'){clearTimeout(form._pnT);form._pnT=setTimeout(refreshPanelChips,300);}
  updateLiveSoon();
 });
 form.addEventListener('change',e=>{
@@ -1700,10 +1704,19 @@ async function buildPdf(r){
  if((a.crit||[]).length){src.push({t:'Essentiel manquant',f:B,s:9.5,g:6});a.crit.forEach(x=>src.push({t:'•  '+x,f:F,s:9.5}));}
  if((a.other||[]).length){src.push({t:'À confirmer',f:B,s:9.5,g:6});a.other.forEach(x=>src.push({t:'•  '+x,f:F,s:9.5}));}
  const vl=[];src.forEach(l=>wrap(l.f,l.s,l.t,CW-30).forEach((t,i)=>vl.push({t,f:l.f,s:l.s,g:i?0:(l.g||0)})));
- const bh=vl.reduce((h,l)=>h+l.s*LH+l.g,0)+18;need(bh);
- page.drawRectangle({x:M,y:y-bh,width:CW,height:bh,color:C(tone[0])});page.drawRectangle({x:M,y:y-bh,width:4,height:bh,color:C(tone[1])});
- let yy=y-9;vl.forEach(l=>{yy-=l.g+l.s*LH;draw(l.t,M+16,yy+3,l.f,l.s,INK);});
- y-=bh+18;
+ // l'encadré du verdict coule sur plusieurs pages s'il est trop long (demandes à plusieurs panneaux)
+ const lh=l=>l.s*LH+l.g;
+ for(let i=0;i<vl.length;){
+  if(y-60<M+22)newPage();
+  const avail=y-(M+22)-18;let j=i,hs=0;
+  while(j<vl.length&&hs+lh(vl[j])<=avail){hs+=lh(vl[j]);j++;}
+  if(j===i){newPage();continue;}
+  const bh=hs+18;
+  page.drawRectangle({x:M,y:y-bh,width:CW,height:bh,color:C(tone[0])});page.drawRectangle({x:M,y:y-bh,width:4,height:bh,color:C(tone[1])});
+  let yy=y-9;for(let k=i;k<j;k++){const l=vl[k];yy-=(k===i&&i>0?0:l.g)+l.s*LH;draw(l.t,M+16,yy+3,l.f,l.s,INK);}
+  y-=bh;i=j;if(i<vl.length)newPage();
+ }
+ y-=18;
  // titres et lignes
  const h2=t=>{need(40);draw(safe(B,t.toUpperCase()),M,y-10,B,10,NAVY);page.drawRectangle({x:M,y:y-16,width:CW,height:1.5,color:C(YEL)});y-=28;};
  const sub=t=>{need(34);draw(safe(B,t),M,y-9,B,9.5,MUT);y-=16;};
