@@ -116,6 +116,17 @@ details.more .field{border:0;border-top:1px solid #edf1f6;border-radius:0;paddin
 .who{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--sky);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:15px}
 .who .grow{flex:1}
 /* démarreurs */
+.fblock.ph .fbt{background:var(--blue);color:#fff;padding:6px 10px;border-radius:6px}
+#pnSect{scroll-margin-top:84px}
+.pnbar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.pntab{display:flex;align-items:center;gap:7px;border:2px solid var(--line);background:#fff;border-radius:999px;padding:7px 13px;min-height:40px;font:inherit;font-weight:600;color:var(--ink);cursor:pointer}
+.pntab.on{border-color:var(--blue);background:#eaf1fb;color:var(--blue)}
+.pntab .dot{width:9px;height:9px;border-radius:50%;background:#2e7d32;flex:none}
+.pntab .dot.warn{background:#e8a200}.pntab .dot.bad{background:#c62828}
+.pnrow{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:0 0 12px}
+.pnrow .field{margin:0}
+.pnname{flex:1;min-width:180px}
+.pnacts{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
 .stcard{border:1px solid #bcd0ea;background:#f7faff;border-radius:10px;padding:10px 12px;margin:0 0 10px}
 .stcard.bad{border-color:var(--bad)}
 .strow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
@@ -555,7 +566,7 @@ table.t td:first-child{white-space:nowrap}
 <script>
 (function(){
 'use strict';
-const VERSION='v0.9.2', VDATE='2026-11-19';
+const VERSION='v0.10', VDATE='2026-11-22';
 const K_SUB='ebi_ds_demandes_v1', K_DRAFT='ebi_ds_brouillon_v2', K_PHX='ebi_ds_phoenix_v1', K_PHXDEMO='ebi_ds_phoenix_demo_v1', K_REP='ebi_ds_rep_v2', K_DEMO='ebi_ds_demo_v1', K_PHXD='ebi_ds_phx_demo_v2';
 
 /* Représentants (courriels à compléter par les T.I.) */
@@ -917,6 +928,72 @@ function steps(){
  s.push(STEP_REVIEW);return s;
 }
 function scopeOf(sp){return sp==='root'?A:A.starters[+sp.split(':')[1]];}
+
+/* ---------- plusieurs panneaux dans une même demande ----------
+   Le panneau affiché vit directement dans A (tout le reste du code fonctionne sans changement);
+   les autres panneaux sont gardés dans A._panels et échangés au besoin. */
+const HDR=new Set(['rep_name','client','date_req','files','tech_in_docs','quote_no','contact_name','contact_email','competition','competitors','date_liv','depts','dictation','photos','_t0','_editId','_editRep','_more','_panels','_pi']);
+const multi=()=>!!(A._panels&&A._panels.length>1);
+function curPanel(){const P={};Object.keys(A).forEach(k=>{if(!HDR.has(k))P[k]=clone(A[k]);});if(!Array.isArray(P.starters))P.starters=[];return P;}
+function headerOf(o){const H={};Object.keys(o).forEach(k=>{if(HDR.has(k)&&k!=='_panels')H[k]=o[k];});return H;}
+function setPanel(P){Object.keys(A).forEach(k=>{if(!HDR.has(k))delete A[k];});Object.assign(A,clone(P||{}));if(!Array.isArray(A.starters))A.starters=[];}
+function panelsAll(){if(!multi())return [curPanel()];const L=A._panels.slice();L[A._pi||0]=curPanel();return L;}
+function withPanel(P,fn){const save=A;A=Object.assign({},headerOf(save),clone(P));if(!Array.isArray(A.starters))A.starters=[];try{applyAllDefaults();return fn();}finally{A=save;}}
+const pQty=P=>Math.max(1,parseInt(P&&P.p_qty,10)||1);
+const pProd=P=>P&&P.product?PRODUCTS[P.product].label:'Produit non précisé';
+function panelLabel(P,i){return `Panneau ${i+1}`+(P&&String(P.p_name||'').trim()?` (${String(P.p_name).trim()})`:'');}
+function prodLabelOf(L){
+ const parts=L.map(P=>(pQty(P)>1?pQty(P)+' × ':'')+pProd(P));
+ if(parts.length<=3)return parts.join(' + ');
+ const tot=L.reduce((n,P)=>n+pQty(P),0);
+ return `${tot} panneaux (${[...new Set(L.map(pProd))].join(', ')})`;
+}
+function switchPanel(i){
+ if(!multi()||i===(A._pi||0))return;
+ A._panels[A._pi||0]=curPanel();setPanel(A._panels[i]);A._pi=i;saveDraft();
+}
+function addPanel(dup){
+ if(!A._panels){A._panels=[curPanel()];A._pi=0;}
+ A._panels[A._pi]=curPanel();
+ const P=dup?Object.assign(curPanel(),{p_name:''}):{starters:[]};
+ if(dup)(P.starters||[]).forEach(x=>x._open=false);
+ delete P._ai;
+ A._panels.push(P);setPanel(P);A._pi=A._panels.length-1;startClock();saveDraft();
+}
+function removePanel(){
+ if(!multi())return;
+ const i=A._pi||0;A._panels.splice(i,1);
+ const j=Math.max(0,i-1);setPanel(A._panels[j]);A._pi=j;
+ if(A._panels.length<2){delete A._panels;delete A._pi;}
+ saveDraft();
+}
+const isHdrItem=x=>/^La demande — (Client|Date|Représentant)/.test(x)||/^Documents techniques/.test(x);
+function assessAll(){
+ if(!multi())return assess();
+ const out={level:'complete',crit:[],other:[]};
+ panelsAll().forEach((P,i)=>{
+  const a=withPanel(P,assess),lab=panelLabel(P,i);
+  ['crit','other'].forEach(k=>a[k].forEach(x=>{if(isHdrItem(x)){if(i===0)out[k].push(x);}else out[k].push(lab+' — '+x.replace(/^La demande — /,''));}));
+ });
+ out.level=out.crit.length?'bloque':(A.tech_in_docs?'docs':(out.other.length?'hypo':'complete'));
+ return out;
+}
+function panelLevel(P){
+ const a=withPanel(P,assess),c=a.crit.filter(x=>!isHdrItem(x)).length,o=a.other.filter(x=>!isHdrItem(x)).length;
+ return c?'bad':(o&&!A.tech_in_docs?'warn':'');
+}
+function techConfirmAll(){return multi()?panelsAll().reduce((n,P)=>n+withPanel(P,techConfirm),0):techConfirm();}
+function panelsHTML(){
+ const L=panelsAll(),pi=A._pi||0,mul=L.length>1;
+ let h='';
+ if(mul)h+=`<div class="pnbar" role="tablist">${L.map((P,i)=>`<button type="button" class="pntab${i===pi?' on':''}" data-act="pn-sel" data-i="${i}" role="tab" aria-selected="${i===pi}"><span class="dot ${panelLevel(P)}"></span>${i+1} · ${esc(P.product?PRODUCTS[P.product].label:'À choisir')}${pQty(P)>1?' × '+pQty(P):''}</button>`).join('')}</div>`;
+ h+=`<div class="pnrow"><div class="field"><span class="flabel">${mul?'Quantité de ce panneau':'Quantité de panneaux identiques'}</span><span class="qty"><button type="button" data-act="pn-qty" data-d="-1" aria-label="Moins">−</button><input type="number" inputmode="numeric" min="1" data-k="p_qty" data-s="root" value="${esc(A.p_qty||'1')}" aria-label="Quantité de panneaux"><button type="button" data-act="pn-qty" data-d="1" aria-label="Plus">+</button></span></div>
+  <div class="field pnname"><span class="flabel">Identification <span class="muted small">(facultatif)</span></span><input class="inp" data-k="p_name" data-s="root" value="${esc(A.p_name||'')}" placeholder="Ex. : MCC principal, panneau PLC convoyeur"></div></div>`;
+ h+=productHTML();
+ h+=`<div class="pnacts"><button type="button" class="btn ghost sm" data-act="pn-add">+ Ajouter un panneau</button>${A.product?'<button type="button" class="btn ghost sm" data-act="pn-dup">Dupliquer ce panneau</button>':''}${mul?'<button type="button" class="btn ghost sm" data-act="pn-del" style="color:#b3261e">Retirer ce panneau</button>':''}</div>`;
+ if(!mul)h+='<p class="help" style="margin:-6px 0 8px">Plusieurs panneaux différents dans la même soumission (ex. : un MCC et son panneau PLC) ? Touchez « Ajouter un panneau ». Pour des panneaux identiques, augmentez simplement la quantité.</p>';
+ return h;
+}
 const vis=(f,s)=>!f.show||f.show(s);
 const optsOf=(f,s)=>typeof f.options==='function'?f.options(s):f.options;
 const flat=fields=>fields.reduce((o,f)=>f.type==='more'?o.concat(f.fields):o.concat([f]),[]);
@@ -1142,6 +1219,7 @@ function visibleAnswers(){
   if(st.fields.some(f=>f.type==='starters'))o.starters=A.starters.map(s=>Object.assign({type:s.type,qty:s.qty||'',hp:s.hp||'',_def:(s._def||[]).slice()},pickVisible(STARTER,s)));
  });
  o.tech_in_docs=!!A.tech_in_docs;
+ o.p_qty=String(pQty(A));o.p_name=String(A.p_name||'');
  return o;
 }
 function rowsHTML(rows){return '<dl class="kv">'+rows.map(([k,v,fl])=>`<dt>${esc(k)}</dt><dd${v==='À confirmer'?' class="qc"':''}>${esc(v)}${fl==='def'?' <span class="habtag">habituel</span>':''}</dd>`).join('')+'</dl>';}
@@ -1198,11 +1276,12 @@ function renderWizard(){
  let html=`<h2>${A._editId?'Compléter la demande':'Nouvelle demande'}</h2>`+editBanner()+pendingBanner()
   +'<p class="lead">Environ 2 minutes, sur une seule page. Aucune question n’est obligatoire : remplissez ce que vous savez, le reste sera à confirmer.</p>'
   +dictHTML()
-  +'<h2 class="sect">La demande</h2>'+fieldsHTML(STEP_REQ.fields,A,'root');
+  +'<h2 class="sect">La demande</h2>'+fieldsHTML(STEP_REQ.fields.filter(f=>f.type!=='product'),A,'root')
+  +`<h2 class="sect" id="pnSect">${multi()?`Panneaux <span>${panelsAll().length} types · ${panelsAll().reduce((n,P)=>n+pQty(P),0)} panneaux au total</span>`:'Panneau'}</h2>`+panelsHTML();
  if(A.product&&!A.tech_in_docs){
-  html+=`<h2 class="sect">Détails techniques <span>${esc(PRODUCTS[A.product].label)}</span></h2><p class="lead small">Les réponses habituelles sont déjà cochées et marquées <span class="habtag">habituel</span> : changez ce qui diffère, ou touchez la réponse pour la confirmer. Touchez <b>?</b> si vous ne savez pas.</p>`+fieldsHTML(PRODUCTS[A.product].tech,A,'root');
+  html+=`<h2 class="sect">Détails techniques <span>${multi()?esc(panelLabel(A,A._pi||0))+' · ':''}${esc(PRODUCTS[A.product].label)}</span></h2><p class="lead small">Les réponses habituelles sont déjà cochées et marquées <span class="habtag">habituel</span> : changez ce qui diffère, ou touchez la réponse pour la confirmer. Touchez <b>?</b> si vous ne savez pas.</p>`+fieldsHTML(PRODUCTS[A.product].tech,A,'root');
  }else if(!A.product){
-  html+='<h2 class="sect">Détails techniques</h2><div class="hint" style="padding:0 0 12px">Choisissez un produit plus haut : ses questions apparaîtront ici.</div>';
+  html+='<h2 class="sect">Détails techniques</h2><div class="hint" style="padding:0 0 12px">Choisissez le produit du panneau plus haut : ses questions apparaîtront ici.</div>';
  }
  html+='<h2 class="sect">Avant d’envoyer</h2><div id="liveVerdict"></div>';
  $('#form').innerHTML=html;
@@ -1230,11 +1309,12 @@ function shortStatus(a){
  return '<span class="st-ok">✓ Complète</span>';
 }
 let liveT=null;
-function updateLive(){const a=assess();const el=$('#liveVerdict');if(el)el.innerHTML=verdictHTML(a,'rep');$('#stepCount').innerHTML=shortStatus(a);}
+function updateLive(){const a=assessAll();const el=$('#liveVerdict');if(el)el.innerHTML=verdictHTML(a,'rep');$('#stepCount').innerHTML=shortStatus(a);}
 function updateLiveSoon(){clearTimeout(liveT);liveT=setTimeout(updateLive,250);}
 function rerenderKeepScroll(){const y=window.scrollY;renderWizard();window.scrollTo(0,y);}
 function startClock(){if(!A._t0)A._t0=Date.now();}
 
+const productsOf=r=>r.panels&&r.panels.length?[...new Set(r.panels.map(p=>p.product).filter(Boolean))]:[r.product];
 function nextId(repName){
  const y=new Date().getFullYear();
  // Initiales du représentant dans le numéro : deux représentants ne peuvent jamais créer le même numéro, même hors ligne.
@@ -1243,7 +1323,35 @@ function nextId(repName){
  const n=Store.list().filter(r=>r.id.startsWith(pre)).map(r=>+r.id.slice(pre.length)||0);
  return pre+String((n.length?Math.max(...n):0)+1).padStart(4,'0');
 }
+function panelHead(P,i,mul){
+ const rows=[['Produit',pProd(P)],['Quantité',String(pQty(P))]];
+ if(String(P.p_name||'').trim())rows.push(['Identification',String(P.p_name).trim()]);
+ return {title:mul?`${panelLabel(P,i)} — ${pProd(P)}${pQty(P)>1?' × '+pQty(P):''}`:'Panneau',rows,ph:mul};
+}
 function recFields(){
+ const L=panelsAll();
+ if(L.length<2){
+  const f=recFields1();const P=L[0];
+  if(pQty(P)>1)f.productLabel=pQty(P)+' × '+f.productLabel;
+  f.panelCount=pQty(P);
+  if(pQty(P)>1||String(P.p_name||'').trim()){const i=f.summary.findIndex(x=>x.title==='La demande');f.summary.splice(i+1,0,panelHead(P,0,false));}
+  return f;
+ }
+ const f=withPanel(L[0],recFields1);
+ f.assess=assessAll();f.toConfirm=techConfirmAll();
+ f.productLabel=prodLabelOf(L);f.panelCount=L.reduce((n,P)=>n+pQty(P),0);
+ f.panels=L.map((P,i)=>withPanel(P,()=>({name:String(P.p_name||'').trim(),qty:pQty(P),product:P.product||'',productLabel:pProd(P),
+  answers:visibleAnswers(),defaults:(A._def||[]).slice(),toConfirm:techConfirm()})));
+ const head=f.summary.filter(x=>x.title==='La demande').map(x=>Object.assign({},x,{rows:x.rows.map(r=>r[0]==='Produit'?['Produit',prodLabelOf(L)]:r)}));
+ const body=[];
+ L.forEach((P,i)=>{
+  body.push(panelHead(P,i,true));
+  withPanel(P,()=>summarize()).filter(x=>x.title!=='La demande').forEach(x=>body.push(Object.assign({},x,{title:`Panneau ${i+1} · ${x.title}`})));
+ });
+ f.summary=head.concat(body);
+ return f;
+}
+function recFields1(){
  const rep=repObj();
  return {product:A.product||'',productLabel:A.product?PRODUCTS[A.product].label:'Produit non précisé',client:String(A.client||'').trim()||'Client non précisé',
   rep:{name:rep.name||'Non précisé',email:rep.email},quoteNo:A.quote_no||'',dateRequired:A.date_req||'',dateDelivery:A.date_liv||'',
@@ -1276,6 +1384,7 @@ function copyFrom(id){
  const keep=['date_req','date_liv','files','quote_no','tech_in_docs','dictation','photos','_ai','_editId'];keep.forEach(k=>delete ans[k]);
  const starters=(ans.starters||[]).map(s=>Object.assign({},s,{_open:false}));delete ans.starters;
  A=Object.assign(blankAnswers(),ans,{rep_name:A.rep_name,product:r.product,client:r.client,starters,_def:clone(r.defaults||[]),_t0:Date.now()});
+ loadPanels(r);
  saveDraft();rerenderKeepScroll();toast(`Réponses reprises de ${r.client}. Ajustez au besoin.`);
 }
 
@@ -1303,6 +1412,10 @@ form.addEventListener('click',e=>{
  if(act==='edit'){goStep(+b.dataset.step);return;}
  if(act==='edit-rep'){A._editRep=true;}
  if(act==='qd'){A[b.dataset.k]=addDays(+b.dataset.d);startClock();clearErr('root|'+b.dataset.k);}
+ if(act==='pn-sel'){switchPanel(i);rerenderKeepScroll();return;}
+ if(act==='pn-add'||act==='pn-dup'){addPanel(act==='pn-dup');renderWizard();const el=$('#pnSect');if(el)el.scrollIntoView({block:'start'});toast(act==='pn-dup'?'Panneau dupliqué : ajustez ce qui diffère.':'Nouveau panneau : choisissez son produit.');return;}
+ if(act==='pn-del'){askConfirm(b,()=>{removePanel();renderWizard();const el=$('#pnSect');if(el)el.scrollIntoView({block:'start'});},'Toucher encore pour retirer');return;}
+ if(act==='pn-qty'){A.p_qty=String(Math.max(1,pQty(A)+(+b.dataset.d)));startClock();}
  if(act==='st-add'){
   A.starters.push({type:b.dataset.t,qty:'1',_open:false});startClock();saveDraft();rerenderKeepScroll();
   const cards=$$('#form .stcard');const last=cards[cards.length-1];
@@ -1326,6 +1439,7 @@ form.addEventListener('input',e=>{
  clearErr(t.dataset.s+'|'+k.replace(/_autre$/,''));
  saveDraft();
  if(/^(kvar|steps_)/.test(k))updateKvarHint();
+ if((k==='p_qty'||k==='p_name')&&multi())clearTimeout(form._pnT),form._pnT=setTimeout(()=>{const y=window.scrollY,ae=document.activeElement,key=ae&&ae.dataset&&ae.dataset.k,pos=ae&&ae.selectionStart;renderWizard();window.scrollTo(0,y);const el=key&&$(`#form [data-k="${key}"][data-s="root"]`);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}},700);
  updateLiveSoon();
 });
 form.addEventListener('change',e=>{
@@ -1364,7 +1478,7 @@ function renderSuivi(){
  const L=all.filter(r=>{
   if(fs==='actives'&&(r.status==='envoyee'||r.status==='annulee'))return false;
   if(fs&&fs!=='actives'&&r.status!==fs)return false;
-  if(fp&&r.product!==fp)return false;
+  if(fp&&!productsOf(r).includes(fp))return false;
   if(q&&![r.id,r.client,r.rep&&r.rep.name,r.quoteNo,r.productLabel].join(' ').toLowerCase().includes(q))return false;
   return true;
  });
@@ -1472,7 +1586,7 @@ function ficheHTML(r){
  if(tech.length){
   h+='<h4>Fiche technique</h4><div class="fgrid">';
   tech.forEach(s=>{
-   if(s.rows&&s.rows.length)h+=`<div class="fblock"><div class="fbt">${esc(s.title)}</div><table class="ft">${s.rows.map(([k,v,fl])=>`<tr><td class="q">${esc(k)}</td><td>${valCell(v,fl)}</td></tr>`).join('')}</table></div>`;
+   if(s.rows&&s.rows.length)h+=`<div class="fblock${s.ph?' wide ph':''}"><div class="fbt">${esc(s.title)}</div><table class="ft">${s.rows.map(([k,v,fl])=>`<tr><td class="q">${esc(k)}</td><td>${valCell(v,fl)}</td></tr>`).join('')}</table></div>`;
    if(s.starters&&s.starters.length)h+=`<div class="fblock wide"><div class="fbt">${esc(s.title)}</div>${startersTable(s.starters)}</div>`;
   });
   h+='</div>';
@@ -1609,12 +1723,13 @@ async function buildPdf(r){
  if(tech.length){
   h2('Fiche technique');
   tech.forEach(s=>{
+   if(s.ph){need(70);y-=6;page.drawRectangle({x:M,y:y-20,width:CW,height:20,color:C(NAVY)});draw(fit(B,10.5,s.title,CW-16),M+8,y-14,B,10.5,[255,255,255]);y-=30;s.rows.forEach(([k,val,fl])=>kv(k,val,fl));y-=10;return;}
    if(s.rows&&s.rows.length){sub(s.title);s.rows.forEach(([k,val,fl])=>{if(fl==='def')hasDef=true;kv(k,val,fl);});y-=8;}
    if(s.starters&&s.starters.length){
-    sub(s.title);
+    need(90);sub(s.title);
     const cols=[{t:'Qté',w:34},{t:'Type',w:118},{t:'Puissance',w:62},{t:'Marque / modèle',w:104},{t:'Détails',w:CW-318}];
     const head=()=>{let x=M;cols.forEach(c=>{draw(safe(B,c.t),x,y-9,B,8.5,MUT);x+=c.w;});y-=14;page.drawRectangle({x:M,y:y+2,width:CW,height:.8,color:C(LINE)});y-=2;};
-    need(40);head();
+    need(70);head();
     s.starters.forEach(t=>{
      const p=stParts(t);
      const det=[];p.rest.forEach(([k,val,fl])=>{if(fl==='def')hasDef=true;wrap(F,8.5,`${k} : ${val}${fl==='def'?' (habituel)':''}`,cols[4].w-6).forEach((l,i)=>det.push({l,q:val==='À confirmer'}));});
@@ -1751,7 +1866,7 @@ function renderKPI(){
  const reps={};inP.forEach(r=>{const k=(r.rep&&r.rep.name)||'—';(reps[k]=reps[k]||[]).push(r);});
  const repRows=Object.entries(reps).map(([k,L])=>{const pr=L.filter(r=>r.status!=='recue'&&r.status!=='annulee');const t=L.map(r=>r.entrySec).filter(x=>x!=null&&x<3600);const J=L.filter(r=>firstOf(r)&&r.status!=='annulee');return {k,n:L.length,f:pct(J.filter(isAdq).length,J.length),t:median(t),last:localDay(L.map(r=>r.createdAt).sort().pop())};}).sort((a,b)=>b.n-a.n);
  h+=`<div class="card sec"><h3 style="margin-bottom:8px">Par représentant</h3>${repRows.length?`<div class="tblwrap"><table class="t"><thead><tr><th>Représentant</th><th class="n">Demandes</th><th class="n">Adéquates 1er coup</th><th class="n">Saisie</th><th class="n">Dernière</th></tr></thead><tbody>${repRows.map(x=>`<tr><td>${esc(x.k)}</td><td class="n">${x.n}</td><td class="n">${x.f==null?'—':x.f+' %'}</td><td class="n">${fmtDur(x.t)}</td><td class="n">${fmtDate(x.last)} <span class="muted small">(${daysBetween(x.last,today())} j)</span></td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Aucune demande sur la période.</p>'}</div>`;
- const prodC=Object.keys(PRODUCTS).map(k=>({k,n:inP.filter(r=>r.product===k).length})),pm=Math.max(1,...prodC.map(x=>x.n));
+ const prodC=Object.keys(PRODUCTS).map(k=>({k,n:inP.filter(r=>productsOf(r).includes(k)).length})),pm=Math.max(1,...prodC.map(x=>x.n));
  h+=`<div class="card sec"><h3 style="margin-bottom:10px">Par produit</h3><div class="bars">${prodC.map(x=>`<div class="br"><span>${esc(PRODUCTS[x.k].label)}</span><span class="tr"><i style="width:${100*x.n/pm}%"></i></span><b style="text-align:right">${x.n}</b></div>`).join('')}</div></div>`;
  h+=`<div class="card sec"><h3>Soumissions Panneaux ouvertes dans Phoenix</h3><p class="small muted" style="margin:4px 0 10px">Total mensuel, pour le taux d’utilisation. Saisi à la main dans le prototype; à tirer de la base de rapports plus tard.</p><div class="phx">${months.map(m=>`<label>${fmtMonth(m)}<input class="inp" type="number" min="0" inputmode="numeric" data-m="${m}" value="${phx[m]||''}"${SB.on()&&!(SB.me&&(SB.me.role==='coord'||SB.me.role==='admin'))?' disabled':''}></label>`).join('')}</div></div>`;
  if(!SB.on())h+=`<div style="display:flex;justify-content:center;margin-top:8px">${all.some(r=>r.demo)?'<button class="btn ghost sm" type="button" data-demo="clear">Effacer les données de démonstration</button>':'<button class="btn ghost sm" type="button" data-demo="load">Charger des données de démonstration</button>'}</div>`;
@@ -1861,6 +1976,13 @@ function renderMine(){
  $('#mineList').innerHTML=L.length?L.map(mineCard).join(''):'<div class="empty">Aucune demande envoyée pour l’instant.</div>';
  updateMineDot();
 }
+function panelsFromRec(r){
+ if(!r.panels||r.panels.length<2)return null;
+ return r.panels.map(p=>{const a=clone(p.answers)||{};Object.keys(a).forEach(k=>{if(HDR.has(k))delete a[k];});
+  a.starters=(a.starters||[]).map(x=>Object.assign({},x,{_open:false}));
+  return Object.assign(a,{product:p.product||undefined,p_qty:String(p.qty||1),p_name:p.name||'',_def:clone(p.defaults||[])});});
+}
+function loadPanels(r){const L=panelsFromRec(r);if(!L)return;A._panels=L;A._pi=0;setPanel(L[0]);}
 function startEdit(id){
  const r=Store.list().find(x=>x.id===id);
  if(!r||!r.answers){toast('Cette demande ne peut pas être modifiée.');return;}
@@ -1870,6 +1992,7 @@ function startEdit(id){
   client:r.client==='Client non précisé'?'':r.client,starters,date_req:r.dateRequired||'',date_liv:r.dateDelivery||'',
   files:clone(r.files||[]),dictation:r.dictation||'',photos:clone(r.photos||[]),tech_in_docs:!!r.techInDocs,_def:clone(r.defaults||[]),_editId:r.id,_t0:Date.now()});
  if(r.product)A.product=r.product;else delete A.product;
+ loadPanels(r);
  doneRec=null;stepIdx=0;saveDraft();setTab('form');toast(`Vous complétez ${r.id}.`);
 }
 $('#mineList').addEventListener('click',e=>{const b=e.target.closest('[data-edit]');if(b)startEdit(b.dataset.edit);});
