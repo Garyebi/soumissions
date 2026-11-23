@@ -566,7 +566,7 @@ table.t td:first-child{white-space:nowrap}
 <script>
 (function(){
 'use strict';
-const VERSION='v0.10.1', VDATE='2026-11-22';
+const VERSION='v0.10.2', VDATE='2026-11-23';
 const K_SUB='ebi_ds_demandes_v1', K_DRAFT='ebi_ds_brouillon_v2', K_PHX='ebi_ds_phoenix_v1', K_PHXDEMO='ebi_ds_phoenix_demo_v1', K_REP='ebi_ds_rep_v2', K_DEMO='ebi_ds_demo_v1', K_PHXD='ebi_ds_phx_demo_v2';
 
 /* Représentants (courriels à compléter par les T.I.) */
@@ -624,6 +624,8 @@ const Cloud={db:null,recs:[],phx:{},state:'local'};
 /* ---------- Version hébergée : base Supabase ----------
    Remplir SUPA (Project URL + clé anon/publishable). Vide = comportement d'origine (base Claude ou appareil).
    La clé anon est faite pour être publique : l'accès aux données est verrouillé par les règles (RLS) de la base. */
+// AI_FN : passer à true une fois la fonction « analyse » installée dans Supabase (clé Anthropic). D'ici là : analyse intégrée, pas de bouton photo.
+const AI_FN=false;
 const SUPA={url:'https://ykrhzmxqqmdtmgsdqewv.supabase.co',key:'sb_publishable_87owEhB1Z0y0k3KVGaFmYQ_duFNX-up'};
 const SB={
  K:'ebi_ds_sb_session_v1',s:null,me:null,
@@ -2253,7 +2255,7 @@ async function aiFill(){
  }catch(e){
   const c=e&&e.code;
   if(['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].includes(c)){AI.sample=null;AI.img=null;pendingImgs=[];fallback=true;}
-  else if(c==='network'||c==='upstream'){pendingImgs=[];fallback=true;}
+  else if(c==='network'||c==='upstream'){pendingImgs=[];fallback=true;if(SB.on())AI.sample=null;}
   else if(c==='images_unavailable'){AI.img=null;pendingImgs=[];AI.msg='Les photos ne peuvent pas être analysées ici; la dictée fonctionne toujours.';AI.cls='err';}
   else{AI.msg=({cancelled:'Analyse arrêtée.',rate_limited:'Trop d’analyses en peu de temps. Réessayez dans un moment.',image_rejected:'Cette photo ne peut pas être lue. Essayez-en une autre.',refused:'Ce texte n’a pas pu être analysé.',session_expired:'Reconnectez-vous à Claude pour utiliser l’analyse.'})[c]||'L’analyse n’a pas fonctionné. Réessayez, ou remplissez à la main.';AI.cls='err';}
  }finally{AI.busy=false;AI.ctl=null;}
@@ -2283,7 +2285,7 @@ const SupaAI={
  }
 };
 async function initAI(){
- if(SB.on()){AI.sample=SupaAI;AI.img={maxCount:3,mediaTypes:['image/jpeg','image/png','image/webp','image/heic','image/heif']};if(activeTab==='form'&&!doneRec)rerenderKeepScroll();return;}
+ if(SB.on()){if(!AI_FN)return;AI.sample=SupaAI;AI.img={maxCount:3,mediaTypes:['image/jpeg','image/png','image/webp','image/heic','image/heif']};if(activeTab==='form'&&!doneRec)rerenderKeepScroll();return;}
  if(!(window.claude&&window.claude.use))return;
  let s=null;try{s=await window.claude.use('sample');}catch(e){}
  if(!s)return;
