@@ -566,7 +566,7 @@ table.t td:first-child{white-space:nowrap}
 <script>
 (function(){
 'use strict';
-const VERSION='v0.10.2', VDATE='2026-11-23';
+const VERSION='v0.10.3', VDATE='2026-11-23';
 const K_SUB='ebi_ds_demandes_v1', K_DRAFT='ebi_ds_brouillon_v2', K_PHX='ebi_ds_phoenix_v1', K_PHXDEMO='ebi_ds_phoenix_demo_v1', K_REP='ebi_ds_rep_v2', K_DEMO='ebi_ds_demo_v1', K_PHXD='ebi_ds_phx_demo_v2';
 
 /* Représentants (courriels à compléter par les T.I.) */
@@ -825,6 +825,7 @@ const OPT_DETAILS=[
  TA('sensors_info','Capteurs — marques, modèles, quantités',{ask:true,show:has('opts',O_SENS)}),
  N('intr_di','Zone intrinsèque — entrées digitales',{ask:true,show:has('opts',O_INTR),w:'w3'}),
  N('intr_ai','Zone intrinsèque — entrées analogiques',{ask:true,show:has('opts',O_INTR),w:'w3'}),
+ R('btn_estop','Bouton d’arrêt d’urgence en façade',['Oui','Non'],{show:has('opts',O_BTN)}),
  TA('buttons_spec','Boutonnerie — préciser',{ask:true,show:has('opts',O_BTN)})];
 const CTRL_PWR=R('ctrl_pwr','Alimentation de contrôle',['Transfo dans le panneau','Externe (client)']);
 const OPTS_CTRL=[O_IOLIST,O_RELAY,O_TVSS,O_PLUG,O_REMOTE,O_HMI,O_SENS,O_SENSB,O_INTR,O_BTN];
@@ -993,7 +994,7 @@ function panelsHTML(){
  const L=panelsAll(),pi=A._pi||0,mul=L.length>1;
  let h='';
  if(mul)h+=`<div class="pnbar" role="tablist">${pnTabsHTML(L,pi)}</div>`;
- h+=`<div class="pnrow"><div class="field"><span class="flabel">${mul?'Quantité de ce panneau':'Quantité de panneaux identiques'}</span><span class="qty"><button type="button" data-act="pn-qty" data-d="-1" aria-label="Moins">−</button><input type="number" inputmode="numeric" min="1" data-k="p_qty" data-s="root" value="${esc(A.p_qty||'1')}" aria-label="Quantité de panneaux"><button type="button" data-act="pn-qty" data-d="1" aria-label="Plus">+</button></span></div>
+ h+=`<div class="pnrow"><div class="field"><span class="flabel">${mul?'Quantité de ce panneau':'Quantité de panneaux'}</span><span class="qty"><button type="button" data-act="pn-qty" data-d="-1" aria-label="Moins">−</button><input type="number" inputmode="numeric" min="1" data-k="p_qty" data-s="root" value="${esc(A.p_qty||'1')}" aria-label="Quantité de panneaux"><button type="button" data-act="pn-qty" data-d="1" aria-label="Plus">+</button></span></div>
   <div class="field pnname"><span class="flabel">Identification <span class="muted small">(facultatif)</span></span><input class="inp" data-k="p_name" data-s="root" value="${esc(A.p_name||'')}" placeholder="Ex. : MCC principal, panneau PLC convoyeur"></div></div>`;
  h+=productHTML();
  h+=`<div class="pnacts"><button type="button" class="btn ghost sm" data-act="pn-add">+ Ajouter un panneau</button>${A.product?'<button type="button" class="btn ghost sm" data-act="pn-dup">Dupliquer ce panneau</button>':''}${mul?'<button type="button" class="btn ghost sm" data-act="pn-del" style="color:#b3261e">Retirer ce panneau</button>':''}</div>`;
@@ -2109,6 +2110,7 @@ function parseLocal(txt){
  if(m=t.match(/sorties?[^.,]{0,20}\b(24|120)\b/))a.do_v=m[1]==='24'?'24 VCC':'120 VCA';
  [[O_HMI,/\bhmi\b|ecran tactile|interface operateur|panelview/],[O_REMOTE,/acces a distance|ewon|modem|\bvpn\b|tele-?acces/],[O_VIND,/indicateur de (voltage|tension)|voltmetre/],[O_INTR,/intrinseque|zener/],[O_SENS,/capteurs?|sondes?/],[O_SENSB,/supports? (de |pour les )?capteurs/],[O_BTN,/boutonnerie|boutons? (en|sur la|dans la) (facade|porte)/],[O_SECT,/sectionnel/],[O_BP,/(bouton|bp) (de )?(faute|reset|rearmement)|rearmement en facade/],[O_IOLIST,/liste (d'|des )?(i\/?o|entrees)/],[O_PLUG,/prise (de service|120|rj ?45)/],[O_RELAY,/relais d'interface/],[O_TVSS,/tvss|parafoudre|surtension/]]
   .forEach(([n,rx])=>{if(rx.test(t)&&!o.opts.includes(n))o.opts.push(n);});
+ if(/(bouton|arret) d.?urgence|\be-?stop\b|coup de poing/.test(t)){if(!o.opts.includes(O_BTN))o.opts.push(O_BTN);a.btn_estop='Oui';}
  if(o.opts.includes(O_HMI)){if(m=t.match(/\b(\d{1,2}(\.\d)?)\s*(pouces?|po\b|")/))a.hmi_dim=m[1]+' po';if(m=t.match(/panelview\s*(plus\s*)?(\d+)?/))a.hmi_model='Allen-Bradley PanelView'+(m[1]?' Plus':'')+(m[2]?' '+m[2]:'');}
  const kv=[...t.matchAll(/(etapes? de )?(\d{2,4})\s*kvar\b/g)].filter(x=>!x[1]);if(kv.length)a.kvar=kv[0][2];
  if(o.product==='cfp'){if(has(/\babb\b/))a.cfp_brand='ABB';else if(has(/schneider/))a.cfp_brand='Schneider';}
